@@ -65,6 +65,7 @@
 		var deltaTime = 0.0;
 		function renderFunc(time)
 		{
+			gl.viewport(0, 0, 500, 500);
 			var currentTime = Date.now();
 			var timeElapsed = currentTime - lastTime;
 			camera.timeElapsed = timeElapsed;

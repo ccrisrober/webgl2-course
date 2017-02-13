@@ -114,6 +114,7 @@
 
 		function renderFunc(time)
 		{
+			gl.viewport(0, 0, 500, 500);
 			var currentTime = Date.now();
 			var timeElapsed = currentTime - lastTime;
 			camera.timeElapsed = 1.0;
@@ -143,10 +144,10 @@
 
 			transforms = projection.concat(view);
 
-	  gl.bindBuffer(gl.UNIFORM_BUFFER, UBO);
-	  gl.bufferData(gl.UNIFORM_BUFFER, transforms, gl.STATIC_DRAW);
-	  gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-	  gl.bindBufferBase(gl.UNIFORM_BUFFER, index, UBO);
+			gl.bindBuffer(gl.UNIFORM_BUFFER, UBO);
+			gl.bufferData(gl.UNIFORM_BUFFER, transforms, gl.STATIC_DRAW);
+			gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+			gl.bindBufferBase(gl.UNIFORM_BUFFER, index, UBO);
 
 			gl.bindVertexArray(VAO);
 			for(var i = 0; i < cubePositions.length; ++i)
