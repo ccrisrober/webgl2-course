@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript">
+		glx = {};
+	</script>
+	<script type="text/javascript" src="program.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="500" height="500"></canvas>
+
+	<script type="text/javascript">
+
+		var canvas = document.getElementById("canvas");
+		var gl = canvas.getContext("webgl2");
+
+		var proj, view, model;
+
+		// Converts from degrees to radians.
+		Math.radians = function(degrees)
+		{
+			return degrees * Math.PI / 180;
+		};
+
+		// Converts from radians to degrees.
+		Math.degrees = function(radians)
+		{
+			return radians * 180 / Math.PI;
+		};
+		
+		function initShader(vname, fname)
+		{
+			var prog = new glx.program();
+			prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+			prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+			prog.compile_and_link();
+
+			return prog;
+		}
+		var basic_shader;
+
+		var angle = 0.0;
+		var time_old = 0;
+		function renderFunc(time)
+		{
+			time /= 1000.0;
+			gl.clearColor(0.2, 0.3, 0.3, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			basic_shader.use();
+
+			var dt = (time - time_old);
+			time_old = time;
+
+			gl.bindVertexArray(VAO);
+			gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+			gl.bindVertexArray(null);
+
+			requestAnimationFrame(renderFunc);
+		}
+		
+		var VBO, VBO2, VAO, EBO;
+
+		function init() 
+		{
+			basic_shader = initShader("simple.vert", "simple.frag");
+
+			var vertices = [
+				 0.5,  0.5, 0.0,  // Top Right
+				 0.5, -0.5, 0.0,  // Bottom Right
+				-0.5, -0.5, 0.0,  // Bottom Left
+				-0.5,  0.5, 0.0   // Top Left 
+			];
+
+			var texCoords = [
+				1.0,  1.0,
+				1.0,  0.0,
+				0.0,  0.0,
+				0.0,  1.0
+			];
+
+			var indices = [
+				0, 1, 3,  // First Triangle
+				1, 2, 3   // Second Triangle
+			];
+
+			VAO = gl.createVertexArray( );
+			VBO = gl.createBuffer( );
+			VBO2 = gl.createBuffer( );
+			EBO = gl.createBuffer( );
+			gl.bindVertexArray(VAO);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO2);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+			gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(1);
+
+
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices),gl.STATIC_DRAW);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, null);
+			gl.bindVertexArray(null);
+
+			renderFunc(0.0);
+		}
+		init();
+		//destroy();
+	</script>
+</body>
+</html>
