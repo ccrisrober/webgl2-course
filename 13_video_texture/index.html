@@ -40,29 +40,37 @@
 			return radians * 180 / Math.PI;
 		};
 
-		var videoElement = document.getElementById("video");
-		videoElement.addEventListener("canplaythrough", startVideo, true);
-    	videoElement.addEventListener("ended", videoDone, true);
-		video.preload = "auto";
-		video.src = "Firefox.ogv";
-		var intervalID;
-
-		function startVideo() {
-			videoElement.play();
- 	 		videoElement.muted = true;
-			
-			initTextures();
-
-			intervalID = setInterval(function()
-			{
-				updateTexture();
-			}, 15);
-
+		var video = document.createElement("video");
+		var videoready = false;
+		video.autoplay = true;
+		video.loop = true;
+		video.oncanplay = function(){
+			console.log("PLAY");
+			videoready=true;
 			init();
 		}
-		function videoDone() {
-			clearInterval(intervalID);
-		}
+
+		video.onerror = function()
+		{
+			var err = "unknown error";
+			
+			switch(video.error.code)
+			{
+				case 1: err = "video loading aborted"; break;
+				case 2: err = "network loading error"; break;
+				case 3: err = "video decoding failed / corrupted data or unsupported codec"; break;
+				case 4: err = "video not supported"; break;
+			}; 
+			
+			console.log("Error: " + err + " (errorcode="+video.error.code+")", "color:red;");
+		};
+		
+		video.src = "Firefox.ogv";
+ 		video.muted = true;
+
+		// try to start playing
+		video.play();
+
 		var cubeTexture;
 		function initTextures() {
 			cubeTexture = gl.createTexture();
@@ -76,7 +84,7 @@
 			gl.bindTexture(gl.TEXTURE_2D, cubeTexture);
 			gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,
-				gl.UNSIGNED_BYTE, videoElement);
+				gl.UNSIGNED_BYTE, video);
 		}
 		
 		function initShader(vname, fname)
@@ -130,9 +138,12 @@
 			var dt = (time - time_old);
 			time_old = time;
 
-			gl.activeTexture(gl.TEXTURE0);
-			gl.bindTexture(gl.TEXTURE_2D, cubeTexture);
-			gl.uniform1i(basic_shader.uniformLocations["ourTexture"], 0);
+			//if (videoready === true)
+			//{
+				//gl.activeTexture(gl.TEXTURE0);
+				//gl.bindTexture(gl.TEXTURE_2D, cubeTexture);
+				//gl.uniform1i(basic_shader.uniformLocations["ourTexture"], 0);
+			//}
 
 			var view = camera.GetViewMatrix();
 			var projection = camera.GetProjectionMatrix(canvas.width, canvas.height);
@@ -218,8 +229,17 @@
 			gl.bindVertexArray(null);
 
 			renderFunc(0.0);
-			updateTexture();
+			initTextures();
+			
+			setInterval(function()
+			{
+				updateTexture();
+			}, 15);
+
+			console.log("INIT");
 		}
+
+		//init( );
 		document.addEventListener("keydown", function (ev)
 		{
 			if (ev.keyCode === 40 || ev.keyCode === 38) {
