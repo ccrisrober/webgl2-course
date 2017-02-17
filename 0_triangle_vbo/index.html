@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript">
+		glx = {};
+	</script>
+	<script type="text/javascript" src="program.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="500" height="500"></canvas>
+
+	<script type="text/javascript">
+		var proj, view, model;
+
+
+		// Converts from degrees to radians.
+		Math.radians = function(degrees)
+		{
+			return degrees * Math.PI / 180;
+		};
+
+		// Converts from radians to degrees.
+		Math.degrees = function(radians)
+		{
+			return radians * 180 / Math.PI;
+		};
+
+		var canvas = document.getElementById("canvas");
+		var gl = canvas.getContext("webgl");
+
+		
+		function initShader(vname, fname)
+		{
+			var prog = new glx.program();
+			prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+			prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+			prog.compile_and_link();
+
+			return prog;
+		}
+		var basic_shader;
+
+		var angle = 0.0;
+		var time_old = 0;
+		function renderFunc(time)
+		{
+			gl.viewport(0, 0, 500, 500);
+			gl.clearColor(0.2, 0.3, 0.3, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			basic_shader.use();
+
+			var dt = time - time_old;
+			time_old = time;
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+			gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+			requestAnimationFrame(renderFunc);
+		}
+		basic_shader = initShader("simple.vert", "simple.frag");
+
+		basic_shader.addUniforms(["proj", "modelView", "normal", "view", "model"]);
+
+
+		var vertices = [
+			-0.5, -0.5, 0.0, // Left  
+			 0.5, -0.5, 0.0, // Right 
+			 0.0,  0.5, 0.0  // Top 
+		];
+
+		var VBO;
+		VBO = gl.createBuffer( );
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+		gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+		gl.enableVertexAttribArray(0);
+		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+		renderFunc(0.0);
+		//destroy();
+	</script>
+</body>
+</html>

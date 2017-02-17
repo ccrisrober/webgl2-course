@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript">
+		glx = {};
+	</script>
+	<script type="text/javascript" src="program.js"></script>
+	<script type="text/javascript" src="camera.js"></script>
+    <script type="text/javascript" src="texture.js"></script>
+	<script type="text/javascript" src="gl-matrix-min.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="500" height="500"></canvas>
+
+	<script type="text/javascript">
+		var proj, view, model;
+		var camera = new Camera([0.1, -0.65, 5.0]);
+
+		// Converts from degrees to radians.
+		Math.radians = function(degrees)
+		{
+			return degrees * Math.PI / 180;
+		};
+
+		// Converts from radians to degrees.
+		Math.degrees = function(radians)
+		{
+			return radians * 180 / Math.PI;
+		};
+
+		var canvas = document.getElementById("canvas");
+		var gl = canvas.getContext("webgl2");
+
+		
+		function initShader(vname, fname, varyings)
+		{
+			var prog = new glx.program();
+			prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+			prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+			if (varyings)
+			{
+				prog.compile();
+				gl.transformFeedbackVaryings(prog.program( ), varyings, gl.SEPARATE_ATTRIBS);
+				prog.link();
+			}
+			else 
+			{
+				prog.compile_and_link();
+			}
+			return prog;
+		}
+		var basic_shader;
+		var update_shader, draw_shader;
+
+		var angle = 0.0;
+		var time_old = 0;
+        var lastTime = Date.now();
+        var deltaTime = 0.0;
+		function renderFunc(time)
+		{
+            var currentTime = Date.now();
+            var timeElapsed = currentTime - lastTime;
+            camera.timeElapsed = timeElapsed;
+            deltaTime = timeElapsed;
+            lastTime = currentTime;
+
+            time /= 1000.0;
+
+			emitParticles(time);
+
+            // Clear color buffer
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+			setupVertexAttrs(particleVAOs[currentSourceIdx], particleVBOs[currentSourceIdx]);
+
+			draw_shader.use();
+
+            texture.enable(0);
+            gl.uniform1i(draw_shader.uniformLocations["ourTexture"], 0);
+            var view = camera.GetViewMatrix();
+            var projection = camera.GetProjectionMatrix(canvas.width, canvas.height);
+
+            gl.uniformMatrix4fv(draw_shader.uniformLocations["projection"], false, projection);
+            gl.uniformMatrix4fv(draw_shader.uniformLocations["view"], false, view);
+            gl.uniformMatrix4fv(draw_shader.uniformLocations["model"], false, mat4.create());
+        	gl.uniform1f(draw_shader.uniformLocations["Time"], time);
+
+            // Enable blending
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.drawArrays(gl.POINTS, 0, nParticles);
+
+			requestAnimationFrame(renderFunc);
+		}
+
+		gl.clearColor(0.1, 0.1, 0.1, 1.0);
+
+		update_shader = initShader("ttupdate.vert", "ttupdate.frag", ["Position", "Velocity", "StartTime"]);
+		update_shader.addUniforms(["Time", "H", "Accel", "ParticleLifetime"]);
+		update_shader.use();
+        gl.uniform1f(update_shader.uniformLocations["ParticleLifetime"], 3.5);
+        gl.uniform3f(update_shader.uniformLocations["Accel"], 0.0, -0.4, 0.0);
+		draw_shader = initShader("simple.vert", "simple.frag");
+		draw_shader.addUniforms(["projection", "view", "model", "Time", "ParticleLifetime"]);
+		draw_shader.use();
+        gl.uniform1f(draw_shader.uniformLocations["ParticleLifetime"], 3.5);
+
+		var nParticles = 4000;
+
+		var particlePositions = new Float32Array(nParticles * 3);
+        var particleVelocities = new Float32Array(nParticles * 3);
+        var particleStartTime = new Float32Array(nParticles);
+        var particleInitialVel = new Float32Array(nParticles * 3);
+
+        var Particle = {
+        	POSITION: 0,
+        	VELOCITY: 1,
+        	START_TIME: 2,
+        	INIT_VEL: 3,
+        	MAX: 4
+        };
+
+        Math.mix = function(x, y, max)
+        {
+            return x * (1.0 - max) + y *max;
+        };
+
+        var v = vec3.fromValues(0.0, 0.0, 0.0);
+        var velocity, theta, phi;
+
+        var time_ = 0.0;
+        var rate_ = 0.001;
+
+        for (var p = 0; p < nParticles; ++p) {
+        	particlePositions[p * 2] = 0.0;
+            particlePositions[p * 2 + 1] = 0.0;
+            particlePositions[p * 2 + 2] = 0.0;
+            
+            particleVelocities[p * 2] = 0.0;
+            particleVelocities[p * 2 + 1] = 0.0;
+            particleVelocities[p * 2 + 2] = 0.0;
+
+
+            particleStartTime[p] = time_;
+            time_ += rate_;
+
+
+            theta = Math.mix(0.0, Math.PI / 6.0, randFloat());
+            phi = Math.mix(0.0, Math.PI * 2.0, randFloat());
+
+            v[0] = Math.sin(theta) * Math.cos(phi);
+            v[1] = Math.cos(theta);
+            v[2] = Math.sin(theta) * Math.sin(phi);
+
+            velocity = Math.mix(1.25, 1.5, randFloat());
+            vec3.normalize(v, v);
+
+        	particleInitialVel[p * 2] = v[0] * velocity;
+            particleInitialVel[p * 2 + 1] = v[1] * velocity;
+            particleInitialVel[p * 2 + 2] = v[2] * velocity;
+        }
+
+        var particleVBOs = new Array(2);
+
+        for(var i= 0; i < 2; ++i)
+        {
+        	particleVBOs[i] = new Array(Particle.MAX);
+        	for(var j= 0; j < Particle.MAX; ++j)
+        	{
+        		particleVBOs[i][j] = gl.createBuffer();
+        	}
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, particleVBOs[i][Particle.POSITION]);
+            gl.bufferData(gl.ARRAY_BUFFER, particlePositions, gl.DYNAMIC_COPY);
+            gl.bindBuffer(gl.ARRAY_BUFFER, particleVBOs[i][Particle.VELOCITY]);
+            gl.bufferData(gl.ARRAY_BUFFER, particleVelocities, gl.DYNAMIC_COPY);
+            gl.bindBuffer(gl.ARRAY_BUFFER, particleVBOs[i][Particle.START_TIME]);
+            gl.bufferData(gl.ARRAY_BUFFER, particleStartTime, gl.DYNAMIC_COPY);
+            gl.bindBuffer(gl.ARRAY_BUFFER, particleVBOs[i][Particle.INIT_VEL]);
+            gl.bufferData(gl.ARRAY_BUFFER, particleInitialVel, gl.STATIC_DRAW);
+        }
+
+        var particleVAOs = [gl.createVertexArray(), gl.createVertexArray()];
+
+        var ttf = gl.createTransformFeedback();
+
+        function randFloat( )
+        {
+            return Math.random();
+        }
+
+		function setupVertexAttrs(vaoID, vboArray)
+		{
+            gl.bindVertexArray(vaoID);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vboArray[Particle.POSITION]);
+            gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(0);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vboArray[Particle.VELOCITY]);
+            gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(1);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vboArray[Particle.START_TIME]);
+            gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(2);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vboArray[Particle.INIT_VEL]);
+            gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(3);
+		}
+
+		gl.viewport(0, 0, 500, 500);
+        var currentSourceIdx = 0;
+
+		function emitParticles(time) 
+		{
+            var destinationVBO = particleVBOs[(currentSourceIdx + 1) % 2];
+			var dt = time - time_old;
+			time_old = time;
+
+            // Toggle source and destination VBO
+            var sourceVBO = particleVBOs[currentSourceIdx];
+            var sourceVAO = particleVAOs[currentSourceIdx];
+
+			update_shader.use();
+			setupVertexAttrs(sourceVAO, sourceVBO);
+
+            // Set transform feedback buffer
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, destinationVBO[Particle.POSITION]);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, destinationVBO[Particle.VELOCITY]);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, destinationVBO[Particle.START_TIME]);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, destinationVBO[Particle.INIT_VEL]);
+
+            // Turn off rasterization - we are not drawing
+            gl.enable(gl.RASTERIZER_DISCARD);
+
+        	gl.uniform1f(update_shader.uniformLocations["Time"], time);
+        	gl.uniform1f(update_shader.uniformLocations["H"], dt);
+
+            // Emit particles using transform feedback
+            gl.beginTransformFeedback(gl.POINTS);
+                gl.drawArrays(gl.POINTS, 0, nParticles);
+            gl.endTransformFeedback();
+
+
+
+            // Restore state
+            gl.disable(gl.RASTERIZER_DISCARD);
+            gl.useProgram(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 1, null);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 2, null);
+            gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 3, null);
+            gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+
+
+            // Ping pong the buffers
+            currentSourceIdx = (currentSourceIdx + 1) % 2;
+		}
+        var texture = new glx.texture();
+        texture.load("bluewater.png", function() 
+        {
+            renderFunc(0.0);
+        });
+
+		//destroy();
+        document.addEventListener("keydown", function (ev)
+        {
+            if (ev.keyCode === 40 || ev.keyCode === 38) {
+                ev.preventDefault();
+            }
+            var key = String.fromCharCode(ev.keyCode);
+            var speed = 0.01;
+            switch (key)
+            {
+                case "W":
+                    camera.processKeyboard(4, speed);
+                    break;
+                case "S":
+                    camera.processKeyboard(5, speed);
+                    break;
+                case "A":
+                    camera.processKeyboard(2, speed);
+                    break;
+                case "D":
+                    camera.processKeyboard(3, speed);
+                    break;
+                case "E":
+                    // - .
+                    camera.processKeyboard(0, speed);
+                    break;
+                case "Q":
+                    // + .
+                    camera.processKeyboard(1, speed);
+                    break;
+                case "X":
+                    //resetCamera();
+                    break;
+            }
+            switch (ev.keyCode)
+            {
+                case 38:
+                    camera.processMouseMovement(0.0, 2.5);
+                    break;
+                case 40:
+                    camera.processMouseMovement(0.0, -2.5);
+                    break;
+                case 37:
+                    camera.processMouseMovement(2.5, 0.0);
+                    break;
+                case 39:
+                    camera.processMouseMovement(-2.5, 0.0);
+                    break;
+            }
+        });
+	</script>
+</body>
+</html>

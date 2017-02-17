@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript">
+		glx = {};
+	</script>
+	<script type="text/javascript" src="program.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="500" height="500"></canvas>
+
+	<script type="text/javascript">
+		var canvas = document.getElementById("canvas");
+		var gl = canvas.getContext("webgl2");
+
+		var bufB;
+
+		function initShader(vname, fname)
+		{
+			var prog = new glx.program();
+			prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+			prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+			prog.compile();
+			gl.transformFeedbackVaryings(prog.program( ), ["gl_Position"], gl.SEPARATE_ATTRIBS);
+			prog.link();
+
+			return prog;
+		}
+		var basic_shader;
+
+		var angle = 0.0;
+		var time_old = 0;
+		function renderFunc(time)
+		{
+			gl.viewport(0, 0, 500, 500);
+			gl.clearColor(0.2, 0.3, 0.3, 1.0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			basic_shader.use();
+
+			var dt = time - time_old;
+			time_old = time;
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 0, 0);
+			gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufB);
+
+			gl.beginTransformFeedback(gl.POINT);
+			gl.drawArrays(gl.POINT, 0, 3);
+			gl.endTransformFeedback();
+
+			gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+
+			requestAnimationFrame(renderFunc);
+		}
+
+		function swap() 
+		{
+			var t = VBO;  VBO = bufB;  bufB = t;
+		}
+
+		basic_shader = initShader("simple.vert", "simple.frag");
+
+		basic_shader.addUniforms(["proj", "modelView", "normal", "view", "model"]);
+
+
+		var vertices = [
+			-0.5, -0.5, 0.0, 1.0, // Left  
+			 0.5, -0.5, 0.0, 1.0, // Right 
+			 0.0,  0.5, 0.0, 1.0 // Top 
+		];
+
+		var VBO;
+		VBO = gl.createBuffer( );
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+		gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+
+		gl.enableVertexAttribArray(0);
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+		bufB = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, bufB);
+		gl.bufferData(gl.ARRAY_BUFFER, 3 * 4 * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_COPY);
+
+		var transformFeedback = gl.createTransformFeedback( );
+		gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
+
+		renderFunc(0.0);
+		//destroy();
+	</script>
+	<button onclick="swap()">Swap</button>
+</body>
+</html>
