@@ -17,8 +17,9 @@
 	<script type="text/javascript">
 
 		var canvas = document.getElementById("canvas");
-		var gl = canvas.getContext("webgl2");
+		var gl = canvas.getContext("webgl");
 		var camera = new Camera([0.1, -0.65, 5.0]);
+		var ext = gl.getExtension("OES_vertex_array_object");
 
 		// Converts from degrees to radians.
 		Math.radians = function(degrees)
@@ -34,15 +35,14 @@
 
 		var texture = new glx.texture();
 		var texture2 = new glx.texture();
-		texture.load("../resources/rock_texture.png", function() 
+		texture.load("container2.png", function() 
 		{
-			texture2.load("../resources/rock_texture_specular.png", function() 
+			texture2.load("container2_specular.png", function() 
 			{
 				init();
 			});
 		});
 
-		var enableSpecTex = true;
 		
 		function initShader(vname, fname)
 		{
@@ -75,12 +75,15 @@
     	var lastTime = Date.now();
 		var deltaTime = 0.0;
 
-        var lightPos = vec3.fromValues(-0.08, -0.08, 2.0);
-        var lightColor = vec3.fromValues(1.0, 0.5, 1.0);
+        var lightPos = vec3.fromValues(1.2, 1.0, 2.0);
+        var lightColor = vec3.fromValues(1.0, 0.7, 0.0);
 
 		function renderFunc(time)
 		{
 			gl.viewport(0, 0, 500, 500);
+			lightPos = camera.position;
+			lightDirection = camera.front;
+
 			var currentTime = Date.now();
 	        var timeElapsed = currentTime - lastTime;
 	        camera.timeElapsed = timeElapsed;
@@ -98,10 +101,6 @@
 
             texture.enable(0);
             gl.uniform1i(basic_shader.uniformLocations["ourTexture"], 0);
-            texture2.enable(1);
-            gl.uniform1i(basic_shader.uniformLocations["specTexture"], 1);
-            
-            gl.uniform1i(basic_shader.uniformLocations["enableSpecTex"], enableSpecTex);
 
 		    var view = camera.GetViewMatrix();
 		    var projection = camera.GetProjectionMatrix(canvas.width, canvas.height);
@@ -110,10 +109,16 @@
             //gl.uniform3f(basic_shader.uniformLocations["ourColor"], 1.0, greenValue, 1.0);
             gl.uniformMatrix4fv(basic_shader.uniformLocations["projection"], false, projection);
             gl.uniformMatrix4fv(basic_shader.uniformLocations["view"], false, view);
-            gl.uniform3f(basic_shader.uniformLocations["lightColor"], lightColor[0], lightColor[1], lightColor[2]);
-            gl.uniform3f(basic_shader.uniformLocations["lightPos"], lightPos[0], lightPos[1], lightPos[2]);
+            gl.uniform3f(basic_shader.uniformLocations["lightColor"],
+            	lightColor[0], lightColor[1], lightColor[2]);
+            gl.uniform3f(basic_shader.uniformLocations["lightPos"], 
+            	lightPos[0], lightPos[1], lightPos[2]);
+            gl.uniform3f(basic_shader.uniformLocations["lightDirection"], 
+            	lightDirection[0], lightDirection[1], lightDirection[2]);
+            gl.uniform3f(basic_shader.uniformLocations["viewPos"], 
+            	camera.position[0], camera.position[1], camera.position[2]);
 
-	        gl.bindVertexArray(VAO);
+	        ext.bindVertexArrayOES(VAO);
             for(var i = 0; i < cubePositions.length; ++i)
             {
 	        	var model = mat4.create();
@@ -125,9 +130,9 @@
 	        	gl.drawElements(gl.TRIANGLES, cubeNTriangleIndex*3, gl.UNSIGNED_SHORT, 0);
             }
 
-            // Draw light
+            /*// Draw light
 			light_shader.use();
-            gl.uniform3f(light_shader.uniformLocations["ourColor"], 1.0, 0.5, 0.31);
+            gl.uniform3f(light_shader.uniformLocations["ourColor"], 1.0, 1.0, 1.0);
             gl.uniform3f(light_shader.uniformLocations["lightColor"], lightColor[0], lightColor[1], lightColor[2]);
             gl.uniformMatrix4fv(light_shader.uniformLocations["projection"], false, projection);
             gl.uniformMatrix4fv(light_shader.uniformLocations["view"], false, view);
@@ -137,9 +142,9 @@
            	mat4.scale(model, model, vec3.fromValues(0.2, 0.2, 0.2));
 
             gl.uniformMatrix4fv(light_shader.uniformLocations["model"], false, model);
-			gl.drawElements(gl.TRIANGLES, cubeNTriangleIndex*3, gl.UNSIGNED_SHORT, 0);
+			gl.drawElements(gl.TRIANGLES, cubeNTriangleIndex*3, gl.UNSIGNED_SHORT, 0);*/
 
-	        gl.bindVertexArray(null);
+	        ext.bindVertexArrayOES(null);
 
 			requestAnimationFrame(renderFunc);
 		}
@@ -150,41 +155,41 @@
 		{
 			gl.enable(gl.DEPTH_TEST);
 
-			basic_shader = initShader("simple.vert", "simple.frag");
-			basic_shader.addUniforms(["ourTexture", "specTexture", "model", "view", "projection"]);
-			basic_shader.addUniforms(["lightColor", "lightPos", "viewPos", "enableSpecTex"]);
+			basic_shader = initShader("simple.vert", "spotlight0.frag");
+			basic_shader.addUniforms(["ourTexture", "model", "view", "projection"]);
+			basic_shader.addUniforms(["lightColor", "lightPos", "lightDirection", "viewPos"]);
 
-			light_shader = initShader("simple.vert", "light.frag");
-			light_shader.addUniforms(["ourColor", "lightColor", "model", "view", "projection"]);
+			//light_shader = initShader("simple.vert", "light.frag");
+			//light_shader.addUniforms(["ourColor", "lightColor", "model", "view", "projection"]);
 
-			VAO = gl.createVertexArray( );
+			VAO = ext.createVertexArrayOES( );
 			VBO = gl.createBuffer( );
 			VBON = gl.createBuffer( );
 			VBO2 = gl.createBuffer( );
 			EBO = gl.createBuffer( );
-			gl.bindVertexArray(VAO);
+			ext.bindVertexArrayOES(VAO);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPos), gl.STATIC_DRAW);
-	    	gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-	  		gl.enableVertexAttribArray(0);
+			gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(0);
 
-	  		gl.bindBuffer(gl.ARRAY_BUFFER, VBON);
-	  		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexNormal), gl.STATIC_DRAW);
-	    	gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
-	  		gl.enableVertexAttribArray(1);
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBON);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexNormal), gl.STATIC_DRAW);
+			gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(1);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, VBO2);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexTexCoord), gl.STATIC_DRAW);
-	    	gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
-	  		gl.enableVertexAttribArray(2);
+			gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+			gl.enableVertexAttribArray(2);
 
 
 		    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
 		    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeTriangleIndex),gl.STATIC_DRAW);
 
 	  		gl.bindBuffer(gl.ARRAY_BUFFER, null);
-	  		gl.bindVertexArray(null);
+	  		ext.bindVertexArrayOES(null);
 
 			renderFunc(0.0);
 		}
@@ -244,12 +249,6 @@
 	            case "H":
 	            	lightPos[0] += 0.01;
 	            	break;
-	            case "O":
-	            	enableSpecTex = false;
-	            	break;
-	            case "P":
-	            	enableSpecTex = true;
-	            	break;
 	        }
 	        switch (ev.keyCode)
 	        {
@@ -269,9 +268,5 @@
     	});
 		//destroy();
 	</script>
-	<ul>
-		<li>P: Enable specular map</li>
-		<li>O: Disable specular map</li>
-	</ul>
 </body>
 </html>

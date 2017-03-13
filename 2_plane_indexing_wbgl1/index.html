@@ -13,7 +13,8 @@
 	<script type="text/javascript">
 
 		var canvas = document.getElementById("canvas");
-		var gl = canvas.getContext("webgl2");
+		var gl = canvas.getContext("webgl");
+		var ext = gl.getExtension("OES_vertex_array_object");
 
 		var proj, view, model;
 
@@ -54,7 +55,7 @@
 			var dt = (time - time_old);
 			time_old = time;
 
-			gl.bindVertexArray(VAO);
+			ext.bindVertexArrayOES(VAO);
 			gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 			gl.bindVertexArray(null);
 
@@ -86,11 +87,11 @@
 				1, 2, 3   // Second Triangle
 			];
 
-			VAO = gl.createVertexArray( );
+			VAO = ext.createVertexArrayOES( );
 			VBO = gl.createBuffer( );
 			VBO2 = gl.createBuffer( );
 			EBO = gl.createBuffer( );
-			gl.bindVertexArray(VAO);
+			ext.bindVertexArrayOES(VAO);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
@@ -107,7 +108,7 @@
 			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices),gl.STATIC_DRAW);
 
 			gl.bindBuffer(gl.ARRAY_BUFFER, null);
-			gl.bindVertexArray(null);
+			ext.bindVertexArrayOES(null);
 
 			renderFunc(0.0);
 		}
