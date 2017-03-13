@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<script type="text/javascript">
+		glx = {};
+	</script>
+	<script type="text/javascript" src="../lib/program.js"></script>
+	<script type="text/javascript" src="../lib/texture.js"></script>
+	<script type="text/javascript" src="../lib/cube.js"></script>
+	<script type="text/javascript" src="../lib/camera.js"></script>
+	<script type="text/javascript" src="../lib/gl-matrix-min.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="500" height="500"></canvas>
+
+	<script type="text/javascript">
+
+		var canvas = document.getElementById("canvas");
+		var gl = canvas.getContext("webgl2");
+		var camera = new Camera([0.1, -0.65, 5.0]);
+
+		// Converts from degrees to radians.
+		Math.radians = function(degrees)
+		{
+			return degrees * Math.PI / 180;
+		};
+
+		// Converts from radians to degrees.
+		Math.degrees = function(radians)
+		{
+			return radians * 180 / Math.PI;
+		};
+
+		var texture = new glx.texture();
+		var texture2 = new glx.texture();
+		texture.load("../resources/container.jpg", function() 
+		{
+			texture2.load("../resources/random_image.png", function() 
+			{
+				init();
+			});
+		});
+
+		
+		function initShader(vname, fname)
+		{
+			var prog = new glx.program();
+			prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+			prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+			prog.compile_and_link();
+
+			return prog;
+		}
+		var basic_shader;
+
+		var angle = 0.0;
+		var time_old = 0;
+
+
+    	var lastTime = Date.now();
+		var deltaTime = 0.0;
+		function renderFunc(time)
+		{	
+			gl.viewport(0, 0, 500, 500);
+			var currentTime = Date.now();
+	        var timeElapsed = currentTime - lastTime;
+	        camera.timeElapsed = timeElapsed;
+	        deltaTime = timeElapsed;
+	        lastTime = currentTime;
+
+
+			time /= 1000.0;
+        	gl.clearColor(0.2, 0.3, 0.3, 1.0);
+        	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			basic_shader.use();
+
+            var dt = (time - time_old);
+            time_old = time;
+
+            texture.enable(0);
+            gl.uniform1i(basic_shader.uniformLocations["ourTexture1"], 0);
+            texture2.enable(1);
+            gl.uniform1i(basic_shader.uniformLocations["ourTexture2"], 1);
+
+
+		    var view = camera.GetViewMatrix();
+		    var projection = camera.GetProjectionMatrix(canvas.width, canvas.height);
+
+
+            gl.uniformMatrix4fv(basic_shader.uniformLocations["projection"], false, projection);
+            gl.uniformMatrix4fv(basic_shader.uniformLocations["view"], false, view);
+
+	        gl.bindVertexArray(VAO);
+
+        	var model = mat4.create();
+            gl.uniformMatrix4fv(basic_shader.uniformLocations["model"], false, model);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, VBO_OFFSET);
+            gl.enableVertexAttribArray(2);
+            gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(2, 1);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, VBO_COLOR);
+            gl.enableVertexAttribArray(3);
+            gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 0, 0);
+            gl.vertexAttribDivisor(3, 1);
+
+            gl.drawElementsInstanced(gl.TRIANGLES, cubeNTriangleIndex*3, gl.UNSIGNED_SHORT, 0, instanceCount);
+
+	        gl.bindVertexArray(null);
+            gl.vertexAttribDivisor(2, 0);
+            gl.vertexAttribDivisor(3, 0);
+
+			requestAnimationFrame(renderFunc);
+		}
+
+		var VBO, VBO2, VAO, EBO, VBO_OFFSET, VBO_COLOR;
+        var instanceCount;
+
+		function init() 
+		{
+			gl.enable(gl.DEPTH_TEST);
+
+			basic_shader = initShader("simple.vert", "simple.frag");
+
+			basic_shader.addUniforms(["ourTexture1", "ourTexture2", "model", "view", "projection"]);
+
+			VAO = gl.createVertexArray( );
+			VBO = gl.createBuffer( );
+			VBO2 = gl.createBuffer( );
+			EBO = gl.createBuffer( );
+			gl.bindVertexArray(VAO);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPos), gl.STATIC_DRAW);
+	    	gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+	  		gl.enableVertexAttribArray(0);
+
+			gl.bindBuffer(gl.ARRAY_BUFFER, VBO2);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexTexCoord), gl.STATIC_DRAW);
+	    	gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+	  		gl.enableVertexAttribArray(1);
+
+
+	  		var cubeSize = 15;
+	  		var size = 1.5;
+            var hmcs = cubeSize / 2.0;
+
+            instanceCount = cubeSize * cubeSize * cubeSize;
+
+            var offsetData = new Float32Array(instanceCount * 3);
+            var colorData = new Float32Array(instanceCount * 3);
+            
+            var i = 0;
+            for(var z = 0; z < cubeSize; ++z) {
+                for(var y = 0; y < cubeSize; ++y) {
+                    for(var x = 0; x < cubeSize; ++x) {
+                        offsetData[i] = (x-hmcs) * size;
+                        offsetData[i+1] = (y-hmcs) * size;
+                        offsetData[i+2] = (z-hmcs) * size;
+
+                        colorData[i] = x / cubeSize;
+                        colorData[i+1] = y / cubeSize;
+                        colorData[i+2] = z / cubeSize;
+                        
+                        i += 3;
+                    }
+                }
+            }
+
+            VBO_OFFSET = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, VBO_OFFSET);
+            gl.bufferData(gl.ARRAY_BUFFER, offsetData, gl.STATIC_DRAW);
+
+            VBO_COLOR = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, VBO_COLOR);
+            gl.bufferData(gl.ARRAY_BUFFER, colorData, gl.STATIC_DRAW);
+
+
+		    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+		    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeTriangleIndex),gl.STATIC_DRAW);
+
+	  		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	  		gl.bindVertexArray(null);
+
+			renderFunc(0.0);
+		}
+    	document.addEventListener("keydown", function (ev)
+    	{
+			if (ev.keyCode === 40 || ev.keyCode === 38) {
+	            ev.preventDefault();
+	        }
+	        var key = String.fromCharCode(ev.keyCode);
+	        var speed = 0.01;
+	        switch (key)
+	        {
+	            case "W":
+	                camera.processKeyboard(4, speed);
+	                break;
+	            case "S":
+	                camera.processKeyboard(5, speed);
+	                break;
+	            case "A":
+	                camera.processKeyboard(2, speed);
+	                break;
+	            case "D":
+	                camera.processKeyboard(3, speed);
+	                break;
+	            case "E":
+	                // - .
+	                camera.processKeyboard(0, speed);
+	                break;
+	            case "Q":
+	                // + .
+	                camera.processKeyboard(1, speed);
+	                break;
+	            case "X":
+	                //resetCamera();
+	                break;
+	        }
+	        switch (ev.keyCode)
+	        {
+	            case 38:
+	                camera.processMouseMovement(0.0, 2.5);
+	                break;
+	            case 40:
+	                camera.processMouseMovement(0.0, -2.5);
+	                break;
+	            case 37:
+	                camera.processMouseMovement(2.5, 0.0);
+	                break;
+	            case 39:
+	                camera.processMouseMovement(-2.5, 0.0);
+	                break;
+	        }
+    	});
+		//destroy();
+	</script>
+</body>
+</html>
