@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title></title>
+  <script type="text/javascript">
+    glx = {};
+  </script>
+  <script type="text/javascript" src="../lib/program.js"></script>
+  <script type="text/javascript" src="../lib/texture.js"></script>
+  <script type="text/javascript" src="../lib/cube.js"></script>
+  <script type="text/javascript" src="../lib/camera.js"></script>
+  <script type="text/javascript" src="../lib/gamepad.js"></script>
+  <script type="text/javascript" src="../lib/gl-matrix-min.js"></script>
+</head>
+<body>
+  <canvas id="canvas" width="500" height="500"></canvas>
+
+  <script type="text/javascript">
+    var canvas = document.getElementById("canvas");
+    var gl = canvas.getContext("webgl2");
+    var camera = new Camera([0.1, -0.65, 5.0]);
+
+    // Converts from degrees to radians.
+    Math.radians = function(degrees)
+    {
+      return degrees * Math.PI / 180;
+    };
+
+    // Converts from radians to degrees.
+    Math.degrees = function(radians)
+    {
+      return radians * 180 / Math.PI;
+    };
+
+    var texture = new glx.texture();
+    var texture2 = new glx.texture();
+    texture.load("../resources/container2.png", function() 
+    {
+      texture2.load("../resources/container2_specular.png", function() 
+      {
+        init();
+      });
+    });
+
+    
+    function initShader(vname, fname)
+    {
+      var prog = new glx.program();
+      prog.addShader(vname, gl.VERTEX_SHADER, mode.read_file);
+      prog.addShader(fname, gl.FRAGMENT_SHADER, mode.read_file);
+
+      prog.compile_and_link();
+
+      return prog;
+    }
+    var basic_shader, light_shader, post_shader;
+
+    var angle = 0.0;
+    var time_old = 0;
+
+
+    var cubePositions = [
+      vec3.fromValues( 0.0,  0.0,  0.0), 
+      vec3.fromValues( 2.0,  5.0, -15.0), 
+      vec3.fromValues(-1.5, -2.2, -2.5),  
+      vec3.fromValues(-3.8, -2.0, -12.3),  
+      vec3.fromValues( 2.4, -0.4, -3.5),  
+      vec3.fromValues(-1.7,  3.0, -7.5),  
+      vec3.fromValues( 1.3, -2.0, -2.5),  
+      vec3.fromValues( 1.5,  2.0, -2.5), 
+      vec3.fromValues( 1.5,  0.2, -1.5), 
+      vec3.fromValues(-1.3,  1.0, -1.5)  
+    ];
+    var lastTime = Date.now();
+    var deltaTime = 0.0;
+
+    var lightPositions = [];
+    var lightColors = [];
+
+    for (var i = 0; i < 10; ++i)
+    {
+      // Calculate slightly random offsets
+      var xPos = ((Math.random() % 100) / 100.0) * 6.0 - 3.0;
+      var yPos = ((Math.random() % 100) / 100.0) * 6.0 - 4.0;
+      var zPos = ((Math.random() % 100) / 100.0) * 6.0 - 3.0;
+      lightPositions.push(vec3.fromValues(xPos, yPos, zPos));
+      // Also calculate random color
+      var rColor = Math.random();
+      var gColor = Math.random();
+      var bColor = Math.random();
+      lightColors.push(vec3.fromValues(rColor, gColor, bColor));
+    }
+
+    function renderFunc(time)
+    {
+      gl.viewport(0, 0, 500, 500);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+      gl.enable(gl.DEPTH_TEST);
+      var currentTime = Date.now();
+      var timeElapsed = currentTime - lastTime;
+      deltaTime = timeElapsed;
+      lastTime = currentTime;
+
+
+      time /= 1000.0;
+      gl.clearColor(0.2, 0.3, 0.3, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      basic_shader.use();
+
+      var dt = (time - time_old);
+      time_old = time;
+      camera.timeElapsed = dt * 12.5;
+
+      texture.enable(0);
+      gl.uniform1i(basic_shader.uniformLocations["ourTexture"], 0);
+
+      var view = camera.GetViewMatrix();
+      var projection = camera.GetProjectionMatrix(canvas.width, canvas.height);
+
+      gl.uniformMatrix4fv(basic_shader.uniformLocations["projection"], false, projection);
+      gl.uniformMatrix4fv(basic_shader.uniformLocations["view"], false, view);
+
+      gl.bindVertexArray(VAO);
+      for(var i = 0; i < cubePositions.length; ++i)
+      {
+        var model = mat4.create();
+        mat4.translate(model, model, cubePositions[i]);
+        var angle = 20.0 * i;
+        mat4.rotate(model, model, angle, vec3.fromValues(1.0, 0.3, 0.5));
+        gl.uniformMatrix4fv(basic_shader.uniformLocations["model"], false, model);
+
+        gl.drawElements(gl.TRIANGLES, cubeNTriangleIndex*3, gl.UNSIGNED_SHORT, 0);
+      }
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.disable(gl.DEPTH_TEST);
+
+      post_shader.use( );
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, TEX);
+      gl.uniform1i(post_shader.uniformLocations["texPosFramebuffer"], 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, TEX2);
+      gl.uniform1i(post_shader.uniformLocations["texNormFramebuffer"], 1);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, TEX3);
+      gl.uniform1i(post_shader.uniformLocations["texDiffFramebuffer"], 2);
+
+      gl.uniform3f(post_shader.uniformLocations["viewPos"], 
+        camera.position[0], camera.position[1], camera.position[2]);
+
+      // Set lights
+      for (var i = 0; i < 10; ++i)
+      {
+        var lightColor = lightColors[i];
+        var lightPos = lightPositions[i];
+
+        gl.uniform3f(post_shader.uniformLocations["lightColor[" + i + "]"],
+          lightColor[0], lightColor[1], lightColor[2]);
+        gl.uniform3f(post_shader.uniformLocations["lightPosition[" + i + "]"],
+          lightPos[0], lightPos[1], lightPos[2]);
+      }
+
+      gl.bindVertexArray(VAOPlane);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      requestAnimationFrame(renderFunc);
+    }
+
+    var VBO, VBON, VBO2, VAO, EBO;
+    var FBO, TEX, TEX2, TEX3, RBO;
+    var VBOPlane, VAOPlane;
+
+    function init() 
+    {
+      gl.enable(gl.DEPTH_TEST);
+
+      // Create framebuffer
+      FBO = gl.createFramebuffer( );
+      gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+
+
+      gl.getExtension("EXT_color_buffer_float");  // https://developer.mozilla.org/en-US/docs/Web/API/EXT_color_buffer_float
+
+
+      // Create texture to hold color buffer
+      TEX = gl.createTexture( );
+      gl.bindTexture(gl.TEXTURE_2D, TEX);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA16F, 500, 500, 0, gl.RGBA, gl.FLOAT, null
+      );
+
+      TEX2 = gl.createTexture( );
+      gl.bindTexture(gl.TEXTURE_2D, TEX2);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA16F, 500, 500, 0, gl.RGBA, gl.FLOAT, null
+      );
+
+      TEX3 = gl.createTexture( );
+      gl.bindTexture(gl.TEXTURE_2D, TEX3);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA16F, 500, 500, 0, gl.RGBA, gl.FLOAT, null
+      );
+
+      var attachments = [ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ];
+      gl.drawBuffers(attachments);
+
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, attachments[0], gl.TEXTURE_2D, TEX, 0
+      );
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, attachments[1], gl.TEXTURE_2D, TEX2, 0
+      );
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, attachments[2], gl.TEXTURE_2D, TEX3, 0
+      );
+
+      // Create Renderbuffer Object to hold depth and stencil buffers
+      RBO = gl.createRenderbuffer( );
+      gl.bindRenderbuffer(gl.RENDERBUFFER, RBO);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 500, 500);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, RBO);
+
+      
+      var status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      switch (status)
+      {
+        case gl.FRAMEBUFFER_COMPLETE:
+          break;
+        case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+          throw("Incomplete framebuffer: FRAMEBUFFER_INCOMPLETE_ATTACHMENT");
+          break;
+        case gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+          throw("Incomplete framebuffer: FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT");
+          break;
+        case gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
+          throw("Incomplete framebuffer: FRAMEBUFFER_INCOMPLETE_DIMENSIONS");
+          break;
+        case gl.FRAMEBUFFER_UNSUPPORTED:
+          throw("Incomplete framebuffer: FRAMEBUFFER_UNSUPPORTED");
+          break;
+        default:
+          throw("Incomplete framebuffer: " + status);
+      }
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      basic_shader = initShader("simple.vert", "point.frag");
+      basic_shader.addUniforms(["ourTexture", "model", "view", "projection"]);
+      basic_shader.addUniforms(["lightColor", "lightPos", "viewPos"]);
+
+      light_shader = initShader("simple.vert", "light.frag");
+      light_shader.addUniforms(["ourColor", "lightColor", "model", "view", "projection"]);
+
+      post_shader = initShader("post.vert", "post.frag");
+      post_shader.addUniforms(["texPosFramebuffer", "texNormFramebuffer", "texDiffFramebuffer", "viewPos"]);
+
+      for (var i = 0; i < 10; ++i)
+      {
+        post_shader.addUniforms(["lightPosition[" + i + "]", "lightColor[" + i + "]"])
+      }
+
+      VAO = gl.createVertexArray( );
+      VBO = gl.createBuffer( );
+      VBON = gl.createBuffer( );
+      VBO2 = gl.createBuffer( );
+      EBO = gl.createBuffer( );
+      gl.bindVertexArray(VAO);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexPos), gl.STATIC_DRAW);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, VBON);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexNormal), gl.STATIC_DRAW);
+      gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(1);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, VBO2);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertexTexCoord), gl.STATIC_DRAW);
+      gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(2);
+
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeTriangleIndex),gl.STATIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      gl.bindVertexArray(null);
+
+      // pos.x pos.y uv.x uv.y
+      var quadVertices = [
+        -1.0,  1.0,  0.0, 1.0,
+         1.0,  1.0,  1.0, 1.0,
+         1.0, -1.0,  1.0, 0.0,
+
+         1.0, -1.0,  1.0, 0.0,
+        -1.0, -1.0,  0.0, 0.0,
+        -1.0,  1.0,  0.0, 1.0
+      ];
+
+      VAOPlane = gl.createVertexArray( );
+      VBOPlane = gl.createBuffer( );
+      gl.bindVertexArray(VAOPlane);
+      gl.bindBuffer(gl.ARRAY_BUFFER, VBOPlane);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(quadVertices), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 0);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+      gl.bindVertexArray(null);
+
+      renderFunc(0.0);
+    }
+
+
+    setInterval(function()
+    {
+      var gamepad = navigator.getGamepads()[0];
+      if (gamepad)
+      {
+        setGPState(gamepad);
+        var speed = 10.0;
+        if (gpState.leftButton.pressed)
+        {
+          camera.processKeyboard(2, speed);
+        }
+        if (gpState.rightButton.pressed)
+        {
+          camera.processKeyboard(3, speed);
+        }
+        if (gpState.topButton.pressed)
+        {
+          camera.processKeyboard(4, speed);
+        }
+        if (gpState.bottomButton.pressed)
+        {
+          camera.processKeyboard(5, speed);
+        }
+        
+        if (gpState.LButton.pressed)
+        {
+          camera.processKeyboard(0, speed);
+        }
+        if (gpState.RButton.pressed)
+        {
+          camera.processKeyboard(1, speed);
+        }
+        camera.processMouseMovement(gpState.xAxis, gpState.yAxis);
+      }
+    });
+
+    document.addEventListener("keydown", function (ev)
+    {
+      if (ev.keyCode === 40 || ev.keyCode === 38) {
+        ev.preventDefault();
+      }
+      var key = String.fromCharCode(ev.keyCode);
+      var speed = 0.01;
+      switch (key)
+      {
+        case "W":
+          camera.processKeyboard(4, speed);
+          break;
+        case "S":
+          camera.processKeyboard(5, speed);
+          break;
+        case "A":
+          camera.processKeyboard(2, speed);
+          break;
+        case "D":
+          camera.processKeyboard(3, speed);
+          break;
+        case "E":
+          // - .
+          camera.processKeyboard(0, speed);
+          break;
+        case "Q":
+          // + .
+          camera.processKeyboard(1, speed);
+          break;
+        case "X":
+          //resetCamera();
+          break;
+
+        case "T":
+          lightPos[2] -= 0.01;
+          break;
+
+        case "U":
+          lightPos[2] += 0.01;
+          break;
+
+        case "Y":
+          lightPos[1] += 0.01;
+          break;
+
+        case "B":
+          lightPos[1] -= 0.01;
+          break;
+
+        case "G":
+          lightPos[0] -= 0.01;
+          break;
+
+        case "H":
+          lightPos[0] += 0.01;
+          break;
+      }
+      switch (ev.keyCode)
+      {
+        case 38:
+          camera.processMouseMovement(0.0, 2.5);
+          break;
+        case 40:
+          camera.processMouseMovement(0.0, -2.5);
+          break;
+        case 37:
+          camera.processMouseMovement(2.5, 0.0);
+          break;
+        case 39:
+          camera.processMouseMovement(-2.5, 0.0);
+          break;
+      }
+    });
+    //destroy();
+  </script>
+</body>
+</html>
